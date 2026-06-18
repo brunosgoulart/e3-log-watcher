@@ -11,6 +11,7 @@ Const MAX_SKIP_CHUNK = 50000000
 Const USE_INCREMENTAL_TAIL_READ = True
 Const ROLLING_BUFFER_MAX_CHARS = 1048576
 
+
 Const ForReading = 1
 Const TristateFalse = 0
 Const BAD_QUALITY = 20
@@ -22,6 +23,7 @@ Dim tailFilePathGlobal
 Dim tailFileSizeGlobal
 Dim rollingTailTextGlobal
 
+
 Dim runCPU
 Dim runPVT
 Dim runHDL
@@ -29,6 +31,7 @@ Dim runTRD
 Dim runOccupancy
 Dim runPendingEvents
 Dim runDiscardedEvents
+Dim runErrors
 Dim runErrorsPerMinute
 Dim runMemory
 Dim runPageFaults
@@ -43,6 +46,7 @@ Dim statusMsgGlobal
 Dim fileRead
 Dim totalTime
 Dim readModeGlobal
+
 
 Sub OnStart()
     ResetOutputs "Aguardando leitura do trigger"
@@ -70,6 +74,7 @@ Sub ResetOutputs(msg)
     runOccupancy = NOT_FOUND
     runPendingEvents = NOT_FOUND
     runDiscardedEvents = NOT_FOUND
+    runErrors = NOT_FOUND
     runErrorsPerMinute = NOT_FOUND
     runMemory = NOT_FOUND
     runPageFaults = NOT_FOUND
@@ -139,6 +144,7 @@ Sub OnRead_trigger(r, v)
 
                 If e3RunScriptsText <> "" Then
                     UpdateValueIfFound runOccupancy, ExtractMetric(e3RunScriptsText, "Occupancy")
+                    UpdateValueIfFound runErrors, ExtractMetric(e3RunScriptsText, "Errors")
                     UpdateValueIfFound runErrorsPerMinute, CalculateErrorsPerMinute(e3RunScriptsText, e3RunPreviousScriptsText)
                 End If
 
@@ -784,12 +790,27 @@ Sub OnRead_runPendingEvents(r, v)
 End Sub
 
 Sub OnRead_runDiscardedEvents(r, v)
+
     v.Value = runDiscardedEvents
+
 End Sub
 
-Sub OnRead_runErrorsPerMinute(r, v)
-    v.Value = runErrorsPerMinute
+
+
+Sub OnRead_runErrors(r, v)
+
+    v.Value = runErrors
+
 End Sub
+
+
+
+Sub OnRead_runErrorsPerMinute(r, v)
+
+    v.Value = runErrorsPerMinute
+
+End Sub
+
 
 Sub OnRead_runMemory(r, v)
     v.Value = runMemory
