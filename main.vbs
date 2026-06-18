@@ -1,7 +1,7 @@
 'Version 1.0 - 2024-06-10
 Option Explicit
 
-Const ETL_SOURCE_FOLDER = "C:\eeLogs\E3"
+Const ETL_SOURCE_FOLDER = "F:\eeLogs\E3\E3"
 Const LOG_FILE_PREFIX = "E3_"
 Const INITIAL_TAIL_READ_MB = 1
 Const TAIL_READ_STEP_MB = 1
@@ -11,9 +11,9 @@ Const MAX_SKIP_CHUNK = 50000000
 Const USE_INCREMENTAL_TAIL_READ = True
 Const ROLLING_BUFFER_MAX_CHARS = 1048576
 
-
 Const ForReading = 1
 Const TristateFalse = 0
+
 Const BAD_QUALITY = 20
 Const NOT_FOUND = "(nao encontrado)"
 
@@ -35,12 +35,10 @@ Dim runErrors
 Dim runErrorsPerMinute
 Dim runMemory
 Dim runPageFaults
-
 Dim serverStatus
 Dim serverCPU
 Dim serverHDL
 Dim serverPVT
-
 Dim statusGlobal
 Dim statusMsgGlobal
 Dim fileRead
@@ -130,21 +128,21 @@ Sub OnRead_trigger(r, v)
             If ReadAdaptiveTail(latestPath, latestSize, processSummaryText, e3RunProcessText, e3RunScriptsText, e3RunPreviousScriptsText, e3RunLinkEventsText, e3ServerText, tailUsedMb, statusMsg) Then
 
                 If processSummaryText <> "" Then
-                    UpdateValueIfFound runMemory, ExtractMetric(processSummaryText, "MemoryLoad")
-                    UpdateValueIfFound runPageFaults, ExtractMetric(processSummaryText, "PageFaults")
+                    UpdateValueIfFound runMemory, ExtractNumericMetric(processSummaryText, "MemoryLoad")
+                    UpdateValueIfFound runPageFaults, ExtractNumericMetric(processSummaryText, "PageFaults")
                     UpdateValueIfFound serverStatus, ExtractProcessStatus(processSummaryText, "E3Server")
                 End If
 
                 If e3RunProcessText <> "" Then
-                    UpdateValueIfFound runCPU, ExtractMetric(e3RunProcessText, "CPU")
-                    UpdateValueIfFound runPVT, ExtractMetric(e3RunProcessText, "PVT")
-                    UpdateValueIfFound runHDL, ExtractMetric(e3RunProcessText, "HDL")
-                    UpdateValueIfFound runTRD, ExtractMetric(e3RunProcessText, "TRD")
+                    UpdateValueIfFound runCPU, ExtractNumericMetric(e3RunProcessText, "CPU")
+                    UpdateValueIfFound runPVT, ExtractNumericMetric(e3RunProcessText, "PVT")
+                    UpdateValueIfFound runHDL, ExtractNumericMetric(e3RunProcessText, "HDL")
+                    UpdateValueIfFound runTRD, ExtractNumericMetric(e3RunProcessText, "TRD")
                 End If
 
                 If e3RunScriptsText <> "" Then
-                    UpdateValueIfFound runOccupancy, ExtractMetric(e3RunScriptsText, "Occupancy")
-                    UpdateValueIfFound runErrors, ExtractMetric(e3RunScriptsText, "Errors")
+                    UpdateValueIfFound runOccupancy, ExtractNumericMetric(e3RunScriptsText, "Occupancy")
+                    UpdateValueIfFound runErrors, ExtractNumericMetric(e3RunScriptsText, "Errors")
                     UpdateValueIfFound runErrorsPerMinute, CalculateErrorsPerMinute(e3RunScriptsText, e3RunPreviousScriptsText)
                 End If
 
@@ -155,9 +153,9 @@ Sub OnRead_trigger(r, v)
 
                 If e3ServerText <> "" Then
                     If serverStatus = NOT_FOUND Then serverStatus = "1"
-                    UpdateValueIfFound serverCPU, ExtractMetric(e3ServerText, "CPU")
-                    UpdateValueIfFound serverPVT, ExtractMetric(e3ServerText, "PVT")
-                    UpdateValueIfFound serverHDL, ExtractMetric(e3ServerText, "HDL")
+                    UpdateValueIfFound serverCPU, ExtractNumericMetric(e3ServerText, "CPU")
+                    UpdateValueIfFound serverPVT, ExtractNumericMetric(e3ServerText, "PVT")
+                    UpdateValueIfFound serverHDL, ExtractNumericMetric(e3ServerText, "HDL")
                 End If
 
                 statusGlobal = "Success"
@@ -685,7 +683,7 @@ Function ExtractLeadingNumber(ByVal value)
     For i = 1 To Len(value)
         ch = Mid(value, i, 1)
 
-        If (ch >= "0" And ch <= "9") Or ch = "." Or ch = "-" Then
+        If (ch >= "0" And ch <= "9") Or ch = "." Or ch = "," Or ch = "-" Then
             result = result & ch
         Else
             Exit For
