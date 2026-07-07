@@ -35,6 +35,8 @@ Dim runErrors
 Dim runErrorsPerMinute
 Dim runMemory
 Dim runPageFaults
+Dim ioQueuePending
+Dim ioQueueAvgDelay
 Dim serverStatus
 Dim serverCPU
 Dim serverHDL
@@ -76,6 +78,8 @@ Sub ResetOutputs(msg)
     runErrorsPerMinute = NOT_FOUND
     runMemory = NOT_FOUND
     runPageFaults = NOT_FOUND
+    ioQueuePending = NOT_FOUND
+    ioQueueAvgDelay = NOT_FOUND
 
     serverStatus = NOT_FOUND
     serverCPU = NOT_FOUND
@@ -109,6 +113,7 @@ Sub OnRead_trigger(r, v)
     Dim e3RunScriptsText
     Dim e3RunPreviousScriptsText
     Dim e3RunLinkEventsText
+    Dim ioQueueText
     Dim e3ServerText
     Dim tailUsedMb
 
@@ -125,7 +130,7 @@ Sub OnRead_trigger(r, v)
 
             fileRead = latestPath
 
-            If ReadAdaptiveTail(latestPath, latestSize, processSummaryText, e3RunProcessText, e3RunScriptsText, e3RunPreviousScriptsText, e3RunLinkEventsText, e3ServerText, tailUsedMb, statusMsg) Then
+            If ReadAdaptiveTail(latestPath, latestSize, processSummaryText, e3RunProcessText, e3RunScriptsText, e3RunPreviousScriptsText, e3RunLinkEventsText, ioQueueText, e3ServerText, tailUsedMb, statusMsg) Then
 
                 If processSummaryText <> "" Then
                     UpdateValueIfFound runMemory, ExtractNumericMetric(processSummaryText, "MemoryLoad")
@@ -149,6 +154,11 @@ Sub OnRead_trigger(r, v)
                 If e3RunLinkEventsText <> "" Then
                     UpdateValueIfFound runPendingEvents, SumMetricValues(e3RunLinkEventsText, "Pending", 2)
                     UpdateValueIfFound runDiscardedEvents, SumMetricValues(e3RunLinkEventsText, "Discarded", 2)
+                End If
+
+                If ioQueueText <> "" Then
+                    UpdateValueIfFound ioQueuePending, ExtractNumericMetric(ioQueueText, "Pending")
+                    UpdateValueIfFound ioQueueAvgDelay, ExtractNumericMetric(ioQueueText, "AvgDelay")
                 End If
 
                 If e3ServerText <> "" Then
@@ -251,7 +261,7 @@ Function FindLatestEtl(ByRef latestPath, ByRef latestSize, ByRef statusMsg)
     FindLatestEtl = True
 End Function
 
-Function ReadAdaptiveTail(ByVal latestPath, ByVal latestSize, ByRef processSummaryText, ByRef e3RunProcessText, ByRef e3RunScriptsText, ByRef e3RunPreviousScriptsText, ByRef e3RunLinkEventsText, ByRef e3ServerText, ByRef tailUsedMb, ByRef statusMsg)
+Function ReadAdaptiveTail(ByVal latestPath, ByVal latestSize, ByRef processSummaryText, ByRef e3RunProcessText, ByRef e3RunScriptsText, ByRef e3RunPreviousScriptsText, ByRef e3RunLinkEventsText, ByRef ioQueueText, ByRef e3ServerText, ByRef tailUsedMb, ByRef statusMsg)
     Dim tailReadMb
     Dim stepMb
     Dim maxTailMb
@@ -264,6 +274,7 @@ Function ReadAdaptiveTail(ByVal latestPath, ByVal latestSize, ByRef processSumma
     e3RunScriptsText = ""
     e3RunPreviousScriptsText = ""
     e3RunLinkEventsText = ""
+    ioQueueText = ""
     e3ServerText = ""
     tailUsedMb = 0
 
@@ -291,6 +302,7 @@ Function ReadAdaptiveTail(ByVal latestPath, ByVal latestSize, ByRef processSumma
         End If
 
         e3RunLinkEventsText = LatestTextAfter(rawData, "LinkEvents.E3Run")
+        ioQueueText = LatestTextAfter(rawData, "IOQueue:")
         e3ServerText = LatestTextAfter(rawData, "ProcessInfo.E3SERVER")
 
         If e3RunProcessText <> "" And e3RunScriptsText <> "" And e3RunLinkEventsText <> "" And e3ServerText <> "" Then
@@ -816,6 +828,22 @@ End Sub
 
 Sub OnRead_runPageFaults(r, v)
     v.Value = runPageFaults
+End Sub
+
+Sub OnRead_ioQueuePending(r, v)
+    v.Value = ioQueuePending
+End Sub
+
+Sub OnRead_ioQueueAvgDelay(r, v)
+    v.Value = ioQueueAvgDelay
+End Sub
+
+Sub OnRead_pending(r, v)
+    v.Value = ioQueuePending
+End Sub
+
+Sub OnRead_avgDelay(r, v)
+    v.Value = ioQueueAvgDelay
 End Sub
 
 Sub OnRead_serverCPU(r, v)
