@@ -1122,14 +1122,21 @@ Function ConvertRunToMinutes(ByVal runValue)
     If runValue = "" Or runValue = NOT_FOUND Then Exit Function
 
     parts = Split(CStr(runValue), ":")
-    If UBound(parts) <> 2 Then Exit Function
-
-    If Not TryParseMetricNumber(parts(0), hoursValue) Then Exit Function
-    If Not TryParseMetricNumber(parts(1), minutesValue) Then Exit Function
-    If Not TryParseMetricNumber(parts(2), secondsValue) Then Exit Function
+    If UBound(parts) = 1 Then
+        hoursValue = 0
+        If Not TryParseMetricNumber(parts(0), minutesValue) Then Exit Function
+        If Not TryParseMetricNumber(parts(1), secondsValue) Then Exit Function
+    ElseIf UBound(parts) = 2 Then
+        If Not TryParseMetricNumber(parts(0), hoursValue) Then Exit Function
+        If Not TryParseMetricNumber(parts(1), minutesValue) Then Exit Function
+        If Not TryParseMetricNumber(parts(2), secondsValue) Then Exit Function
+    Else
+        Exit Function
+    End If
 
     If hoursValue < 0 Then Exit Function
-    If minutesValue < 0 Or minutesValue >= 60 Then Exit Function
+    If minutesValue < 0 Then Exit Function
+    If UBound(parts) = 2 And minutesValue >= 60 Then Exit Function
     If secondsValue < 0 Or secondsValue >= 60 Then Exit Function
 
     ConvertRunToMinutes = CStr(Fix((hoursValue * 60) + minutesValue + (secondsValue / 60)))
@@ -1437,6 +1444,20 @@ Function FormatMetricNumber(ByVal value)
     FormatMetricNumber = result
 End Function
 
+Sub SetNumericOutput(ByRef v, ByVal value)
+    Dim numberValue
+
+    If TryParseMetricNumber(value, numberValue) Then
+        v.Value = numberValue
+    Else
+        v.Value = value
+    End If
+End Sub
+
+Sub SetPercentOutput(ByRef v, ByVal value)
+    SetNumericOutput v, value
+End Sub
+
 Function ExtractNumericMetric(ByVal text, ByVal metricName)
     Dim value
 
@@ -1540,7 +1561,7 @@ Function FormatWholeNumber(ByVal value)
 End Function
 
 Sub OnRead_runCPU(r, v)
-    v.Value = runCPU
+    SetPercentOutput v, runCPU
 End Sub
 
 Sub OnRead_runPVT(r, v)
@@ -1564,7 +1585,7 @@ Sub OnRead_runRestartDetected(r, v)
 End Sub
 
 Sub OnRead_runOccupancy(r, v)
-    v.Value = runOccupancy
+    SetPercentOutput v, runOccupancy
 End Sub
 
 Sub OnRead_runAvgScriptTime(r, v)
@@ -1624,11 +1645,11 @@ Sub OnRead_runRemoteQueueGrowthPerMinute(r, v)
 End Sub
 
 Sub OnRead_runLocalDiscardPercent(r, v)
-    v.Value = runLocalDiscardPercent
+    SetPercentOutput v, runLocalDiscardPercent
 End Sub
 
 Sub OnRead_runRemoteDiscardPercent(r, v)
-    v.Value = runRemoteDiscardPercent
+    SetPercentOutput v, runRemoteDiscardPercent
 End Sub
 
 Sub OnRead_linkEventsIntervalMinutes(r, v)
@@ -1644,7 +1665,7 @@ Sub OnRead_runAnyCounterReset(r, v)
 End Sub
 
 Sub OnRead_globalCPU(r, v)
-    v.Value = globalCPU
+    SetPercentOutput v, globalCPU
 End Sub
 
 Sub OnRead_globalThreads(r, v)
@@ -1668,7 +1689,7 @@ Sub OnRead_serverStatus(r, v)
 End Sub
 
 Sub OnRead_serverCPU(r, v)
-    v.Value = serverCPU
+    SetPercentOutput v, serverCPU
 End Sub
 
 Sub OnRead_serverPVT(r, v)
