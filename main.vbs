@@ -1716,6 +1716,10 @@ Sub OnRead_etlFileChanged(r, v)
     v.Value = etlFileChanged
 End Sub
 
+Sub OnRead_fileRead(r, v)
+    v.Value = fileRead
+End Sub
+
 Sub OnRead_foundProcessSummary(r, v)
     v.Value = foundProcessSummary
 End Sub
