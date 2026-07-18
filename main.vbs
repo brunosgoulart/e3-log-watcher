@@ -1,7 +1,10 @@
-'Version 1.8 - 2026-07-16
+'Version 1.9 - 2026-07-18
 'Baseada na versao 1.0.2 - 2024-06-10.
 'Adicionadas: collectionTimestamp, metricas IOQueue, runAvgScriptTime,
 'metricas Remote e runUptimeMinutes.
+'Correcao da versao 1.9:
+'- runErrorsPerMinute agora calcula a variacao de Errors entre coletas
+'  consecutivas, dividida pelo tempo real decorrido em minutos.
 Option Explicit
 
 Const ETL_SOURCE_FOLDER = "F:\eeLogs\E3\E3"
@@ -56,10 +59,13 @@ Dim fileRead
 Dim totalTime
 Dim readModeGlobal
 Dim collectionTimestamp
+Dim previousRunErrors
+Dim previousRunErrorsTime
 
 
 Sub OnStart()
     ResetOutputs "Aguardando leitura do trigger"
+    ResetErrorRateState
 
     Err.Clear
     Set fsoGlobal = CreateObject("Scripting.FileSystemObject")
@@ -69,6 +75,11 @@ Sub OnStart()
         statusMsgGlobal = "Erro criando FileSystemObject: " & Err.Description
         Err.Clear
     End If
+End Sub
+
+Sub ResetErrorRateState()
+    previousRunErrors = NOT_FOUND
+    previousRunErrorsTime = Empty
 End Sub
 
 Sub OnStop()
@@ -127,6 +138,7 @@ Sub OnRead_trigger(r, v)
     Dim latestSize
     Dim currentSampleTime
     Dim runText
+    Dim currentErrors
     Dim processSummaryText
     Dim e3RunProcessText
     Dim e3RunScriptsText
@@ -172,8 +184,9 @@ Sub OnRead_trigger(r, v)
 
                 If e3RunScriptsText <> "" Then
                     UpdateValueIfFound runOccupancy, ExtractNumericMetric(e3RunScriptsText, "Occupancy")
-                    UpdateValueIfFound runErrors, ExtractNumericMetric(e3RunScriptsText, "Errors")
-                    UpdateValueIfFound runErrorsPerMinute, CalculateErrorsPerMinute(e3RunScriptsText, e3RunPreviousScriptsText)
+                    currentErrors = ExtractNumericMetric(e3RunScriptsText, "Errors")
+                    UpdateValueIfFound runErrors, currentErrors
+                    runErrorsPerMinute = CalculateErrorsPerMinute(currentErrors, currentSampleTime)
                     UpdateValueIfFound runAvgScriptTime, CalculateAverageMetric(ExtractNumericMetric(e3RunScriptsText, "Time"), ExtractNumericMetric(e3RunScriptsText, "Execs"))
                 End If
 
@@ -767,24 +780,30 @@ Function ExtractProcessStatus(ByVal text, ByVal processName)
     End If
 End Function
 
-Function CalculateErrorsPerMinute(ByVal latestScriptsText, ByVal previousScriptsText)
-    Dim latestErrors
-    Dim previousErrors
-    Dim errorDelta
+Function CalculateErrorsPerMinute(ByVal currentErrors, ByVal currentSampleTime)
+    Dim currentErrorsNumber
+    Dim previousErrorsNumber
+    Dim elapsedSeconds
+    Dim elapsedMinutes
 
     CalculateErrorsPerMinute = NOT_FOUND
-    latestErrors = ExtractNumericMetric(latestScriptsText, "Errors")
-    previousErrors = ExtractNumericMetric(previousScriptsText, "Errors")
+    If Not TryParseMetricNumber(currentErrors, currentErrorsNumber) Then Exit Function
 
-    If latestErrors = "" Or previousErrors = "" Then Exit Function
-
-    If CDbl(latestErrors) >= CDbl(previousErrors) Then
-        errorDelta = CDbl(latestErrors) - CDbl(previousErrors)
-    Else
-        errorDelta = CDbl(latestErrors)
+    If IsEmpty(previousRunErrorsTime) Or Not TryParseMetricNumber(previousRunErrors, previousErrorsNumber) Then
+        previousRunErrors = currentErrors
+        previousRunErrorsTime = currentSampleTime
+        Exit Function
     End If
 
-    CalculateErrorsPerMinute = FormatWholeNumber(errorDelta)
+    elapsedSeconds = DateDiff("s", previousRunErrorsTime, currentSampleTime)
+
+    If elapsedSeconds > 0 And currentErrorsNumber >= previousErrorsNumber Then
+        elapsedMinutes = CDbl(elapsedSeconds) / 60
+        CalculateErrorsPerMinute = FormatMetricNumber((currentErrorsNumber - previousErrorsNumber) / elapsedMinutes)
+    End If
+
+    previousRunErrors = currentErrors
+    previousRunErrorsTime = currentSampleTime
 End Function
 
 Function ExtractNumericMetric(ByVal text, ByVal metricName)
