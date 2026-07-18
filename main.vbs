@@ -1,4 +1,4 @@
-'Version 1.9 - 2026-07-18
+'Version 1.9.0 - 2026-07-18
 'Baseada na versao 1.0.2 - 2024-06-10.
 'Adicionadas: collectionTimestamp, metricas IOQueue, runAvgScriptTime,
 'metricas Remote e runUptimeMinutes.
