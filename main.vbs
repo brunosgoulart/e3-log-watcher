@@ -1,18 +1,23 @@
-'Version 1.9.0 - 2026-07-18
+'Version 1.9.1 - 2026-07-23
 'Baseada na versao 1.0.2 - 2024-06-10.
 'Adicionadas: collectionTimestamp, metricas IOQueue, runAvgScriptTime,
 'metricas Remote e runUptimeMinutes.
 'Correcao da versao 1.9:
 '- runErrorsPerMinute agora calcula a variacao de Errors entre coletas
 '  consecutivas, dividida pelo tempo real decorrido em minutos.
+'Correcao da versao 1.9.1:
+'- Tail de leitura aumentado para 2 MB para capturar registros recentes
+'  que fiquem fora do ultimo 1 MB do ETL.
+'- Janela apos cada marcador aumentada para 2000 caracteres, reduzindo
+'  perda de metricas quando a linha ProcessInfo vem mais extensa.
 Option Explicit
 
 Const ETL_SOURCE_FOLDER = "F:\eeLogs\E3\E3"
 Const LOG_FILE_PREFIX = "E3_"
-Const INITIAL_TAIL_READ_MB = 1
+Const INITIAL_TAIL_READ_MB = 2
 Const TAIL_READ_STEP_MB = 1
-Const MAX_TAIL_READ_MB = 1
-Const MAX_TEXT_AFTER_MARKER = 900
+Const MAX_TAIL_READ_MB = 2
+Const MAX_TEXT_AFTER_MARKER = 2000
 Const MAX_SKIP_CHUNK = 50000000
 Const USE_INCREMENTAL_TAIL_READ = True
 Const ROLLING_BUFFER_MAX_CHARS = 1048576
