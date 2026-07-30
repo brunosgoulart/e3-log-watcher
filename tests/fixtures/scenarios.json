@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "normal": {"collection_timestamp": "2026-01-01T12:00:00-03:00", "uptime_minutes": 100},
+  "stale": {"collection_timestamp": "2026-01-01T12:00:00-03:00", "observed_at": "2026-01-01T12:06:00-03:00"},
+  "acquisition_failure": {"error": "synthetic PI client error"},
+  "uptime_reset": {"previous": 100, "current": 3},
+  "counter_reset": {"previous": 40, "current": 1},
+  "possible_switchover": {"file_read_changed": true, "status_changed": true},
+  "low_quality": {"quality_ratio": 0.25},
+  "out_of_order": {"previous": "2026-01-01T12:02:00-03:00", "current": "2026-01-01T12:01:00-03:00"},
+  "progressive_degradation": {"note": "synthetic data reserved for Phase 2 baseline and trend tests"},
+  "recovery": {"note": "synthetic data reserved for Phase 2 recovery and hysteresis tests"}
+}

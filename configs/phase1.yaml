@@ -1,0 +1,181 @@
+# Phase 1 configuration. Secrets are intentionally absent; use environment variables.
+pi_system:
+  access_method: "pi_af_sdk"
+  # Caminho PI confirmado: \\PIDATAPRO\CSEO.COGCGPRO34.E3Run.TRD.
+  # PIDATAPRO é o PI Data Archive; CSEO... é o nome da tag/PIPoint.
+  # AF Server permanece opcional porque não é necessário para consultar PIPoints diretamente.
+  af_server: "${PI_AF_SERVER}"
+  data_archive: "PIDATAPRO"
+  authentication_method: "windows_integrated"
+  request_timeout_seconds: 30
+  retry_attempts: 3
+  retry_delay_seconds: 5
+  query_mode: "recorded"
+  timezone: "America/Sao_Paulo"
+
+acquisition:
+  online_interval_seconds: 60
+  historical_batch_hours: 24
+  overlap_seconds: 10
+  expected_collection_interval_seconds: 60
+  delayed_after_seconds: 120
+  stale_after_seconds: 300
+  switchover_suspect_after_seconds: 180
+  stabilization_seconds: 600
+  unavailable_after_seconds: 900
+  minimum_valid_samples: 3
+  maximum_events_per_query: 10000
+  reject_questionable_values: false
+  reject_bad_values: true
+  exclude_substituted_from_analysis: false
+  store_raw_values: true
+
+storage:
+  sqlite_path: "data/e3_monitor.db"
+
+dashboard:
+  refresh_seconds: 30
+  history_hours: 24
+
+logging:
+  level: "INFO"
+  structured: true
+
+server_groups:
+  - group_id: "COGCGPRO12"
+    pi_prefix: "CSEO.COGCGPRO12"
+    physical_servers: ["COGCGPRO1", "COGCGPRO2"]
+    redundancy_mode: "hot_standby"
+  - group_id: "COGCGPRO34"
+    pi_prefix: "CSEO.COGCGPRO34"
+    physical_servers: ["COGCGPRO3", "COGCGPRO4"]
+    redundancy_mode: "hot_standby"
+  - group_id: "COGCGPRO56"
+    pi_prefix: "CSEO.COGCGPRO56"
+    physical_servers: ["COGCGPRO5", "COGCGPRO6"]
+    redundancy_mode: "hot_standby"
+
+# Units are deliberately null until confirmed against the PI metadata.
+# E3Server.Status remains unknown because its returned domain has not been provided.
+metric_catalog:
+  CollectionTimeStamp: {expected_type: "datetime", category: "collection", unit: null, enabled: true}
+  E3Run.AvgScriptTime: {expected_type: "number", category: "script", unit: null, enabled: true}
+  E3Run.CPU: {expected_type: "number", category: "resource", unit: null, enabled: true}
+  E3Run.DiscardedEvents: {expected_type: "number", category: "event", unit: null, enabled: true}
+  E3Run.Errors: {expected_type: "number", category: "event", unit: null, enabled: true}
+  E3Run.ErrorsPerMinute: {expected_type: "number", category: "event", unit: null, enabled: true}
+  E3Run.HDL: {expected_type: "number", category: "resource", unit: null, enabled: true}
+  E3Run.Memory: {expected_type: "number", category: "resource", unit: null, enabled: true}
+  E3Run.Occupancy: {expected_type: "number", category: "script", unit: null, enabled: true}
+  E3Run.PageFaults: {expected_type: "number", category: "resource", unit: null, enabled: true}
+  E3Run.PendingEvents: {expected_type: "number", category: "event", unit: null, enabled: true}
+  E3Run.PVT: {expected_type: "number", category: "resource", unit: null, enabled: true}
+  E3Run.RemoteDiscardedPerMinute: {expected_type: "number", category: "event", unit: null, enabled: true}
+  E3Run.RemoteDiscardPercent: {expected_type: "number", category: "event", unit: null, enabled: true}
+  E3Run.RemoteHandledPerMinute: {expected_type: "number", category: "event", unit: null, enabled: true}
+  E3Run.RemotePending: {expected_type: "number", category: "event", unit: null, enabled: true}
+  E3Run.TRD: {expected_type: "number", category: "resource", unit: null, enabled: true}
+  E3Run.UpTimeMinutes: {expected_type: "number", category: "uptime", unit: null, enabled: true}
+  E3Server.CPU: {expected_type: "number", category: "resource", unit: null, enabled: true}
+  E3Server.HDL: {expected_type: "number", category: "resource", unit: null, enabled: true}
+  E3Server.PVT: {expected_type: "number", category: "resource", unit: null, enabled: true}
+  E3Server.Status: {expected_type: "unknown", category: "status", unit: null, enabled: true}
+  FileRead: {expected_type: "text", category: "file", unit: null, enabled: true}
+  ioQueue.AvgDelay: {expected_type: "number", category: "io_queue", unit: null, enabled: true}
+  ioQueue.Pending: {expected_type: "number", category: "io_queue", unit: null, enabled: true}
+  TotalTime: {expected_type: "number", category: "collection", unit: null, enabled: true}
+
+# These rules are conservative technical hypotheses. Confirm counter semantics
+# before enabling extra reset-sensitive metrics in a production configuration.
+redundancy:
+  unavailable_status_values: []
+  reset_sensitive_metric_suffixes:
+    - "E3Run.DiscardedEvents"
+    - "E3Run.Errors"
+  minimum_switchover_evidence: 2
+
+quality:
+  accepted_quality_values: ["Good"]
+  bad_quality_values: ["Bad"]
+  minimum_group_quality_ratio: 0.75
+
+# Closed allow-list. No client may query a tag outside this list.
+authorized_tags:
+  - "CSEO.COGCGPRO12.CollectionTimeStamp"
+  - "CSEO.COGCGPRO12.E3Run.AvgScriptTime"
+  - "CSEO.COGCGPRO12.E3Run.CPU"
+  - "CSEO.COGCGPRO12.E3Run.DiscardedEvents"
+  - "CSEO.COGCGPRO12.E3Run.Errors"
+  - "CSEO.COGCGPRO12.E3Run.ErrorsPerMinute"
+  - "CSEO.COGCGPRO12.E3Run.HDL"
+  - "CSEO.COGCGPRO12.E3Run.Memory"
+  - "CSEO.COGCGPRO12.E3Run.Occupancy"
+  - "CSEO.COGCGPRO12.E3Run.PageFaults"
+  - "CSEO.COGCGPRO12.E3Run.PendingEvents"
+  - "CSEO.COGCGPRO12.E3Run.PVT"
+  - "CSEO.COGCGPRO12.E3Run.RemoteDiscardedPerMinute"
+  - "CSEO.COGCGPRO12.E3Run.RemoteDiscardPercent"
+  - "CSEO.COGCGPRO12.E3Run.RemoteHandledPerMinute"
+  - "CSEO.COGCGPRO12.E3Run.RemotePending"
+  - "CSEO.COGCGPRO12.E3Run.TRD"
+  - "CSEO.COGCGPRO12.E3Run.UpTimeMinutes"
+  - "CSEO.COGCGPRO12.E3Server.CPU"
+  - "CSEO.COGCGPRO12.E3Server.HDL"
+  - "CSEO.COGCGPRO12.E3Server.PVT"
+  - "CSEO.COGCGPRO12.E3Server.Status"
+  - "CSEO.COGCGPRO12.FileRead"
+  - "CSEO.COGCGPRO12.ioQueue.AvgDelay"
+  - "CSEO.COGCGPRO12.ioQueue.Pending"
+  - "CSEO.COGCGPRO12.TotalTime"
+  - "CSEO.COGCGPRO34.CollectionTimeStamp"
+  - "CSEO.COGCGPRO34.E3Run.AvgScriptTime"
+  - "CSEO.COGCGPRO34.E3Run.CPU"
+  - "CSEO.COGCGPRO34.E3Run.DiscardedEvents"
+  - "CSEO.COGCGPRO34.E3Run.Errors"
+  - "CSEO.COGCGPRO34.E3Run.ErrorsPerMinute"
+  - "CSEO.COGCGPRO34.E3Run.HDL"
+  - "CSEO.COGCGPRO34.E3Run.Memory"
+  - "CSEO.COGCGPRO34.E3Run.Occupancy"
+  - "CSEO.COGCGPRO34.E3Run.PageFaults"
+  - "CSEO.COGCGPRO34.E3Run.PendingEvents"
+  - "CSEO.COGCGPRO34.E3Run.PVT"
+  - "CSEO.COGCGPRO34.E3Run.RemoteDiscardedPerMinute"
+  - "CSEO.COGCGPRO34.E3Run.RemoteDiscardPercent"
+  - "CSEO.COGCGPRO34.E3Run.RemoteHandledPerMinute"
+  - "CSEO.COGCGPRO34.E3Run.RemotePending"
+  - "CSEO.COGCGPRO34.E3Run.TRD"
+  - "CSEO.COGCGPRO34.E3Run.UpTimeMinutes"
+  - "CSEO.COGCGPRO34.E3Server.CPU"
+  - "CSEO.COGCGPRO34.E3Server.HDL"
+  - "CSEO.COGCGPRO34.E3Server.PVT"
+  - "CSEO.COGCGPRO34.E3Server.Status"
+  - "CSEO.COGCGPRO34.FileRead"
+  - "CSEO.COGCGPRO34.ioQueue.AvgDelay"
+  - "CSEO.COGCGPRO34.ioQueue.Pending"
+  - "CSEO.COGCGPRO34.TotalTime"
+  - "CSEO.COGCGPRO56.CollectionTimeStamp"
+  - "CSEO.COGCGPRO56.E3Run.AvgScriptTime"
+  - "CSEO.COGCGPRO56.E3Run.CPU"
+  - "CSEO.COGCGPRO56.E3Run.DiscardedEvents"
+  - "CSEO.COGCGPRO56.E3Run.Errors"
+  - "CSEO.COGCGPRO56.E3Run.ErrorsPerMinute"
+  - "CSEO.COGCGPRO56.E3Run.HDL"
+  - "CSEO.COGCGPRO56.E3Run.Memory"
+  - "CSEO.COGCGPRO56.E3Run.Occupancy"
+  - "CSEO.COGCGPRO56.E3Run.PageFaults"
+  - "CSEO.COGCGPRO56.E3Run.PendingEvents"
+  - "CSEO.COGCGPRO56.E3Run.PVT"
+  - "CSEO.COGCGPRO56.E3Run.RemoteDiscardedPerMinute"
+  - "CSEO.COGCGPRO56.E3Run.RemoteDiscardPercent"
+  - "CSEO.COGCGPRO56.E3Run.RemoteHandledPerMinute"
+  - "CSEO.COGCGPRO56.E3Run.RemotePending"
+  - "CSEO.COGCGPRO56.E3Run.TRD"
+  - "CSEO.COGCGPRO56.E3Run.UpTimeMinutes"
+  - "CSEO.COGCGPRO56.E3Server.CPU"
+  - "CSEO.COGCGPRO56.E3Server.HDL"
+  - "CSEO.COGCGPRO56.E3Server.PVT"
+  - "CSEO.COGCGPRO56.E3Server.Status"
+  - "CSEO.COGCGPRO56.FileRead"
+  - "CSEO.COGCGPRO56.ioQueue.AvgDelay"
+  - "CSEO.COGCGPRO56.ioQueue.Pending"
+  - "CSEO.COGCGPRO56.TotalTime"

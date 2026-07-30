@@ -1,23 +1,13 @@
-'Version 1.9.1 - 2026-07-23
-'Baseada na versao 1.0.2 - 2024-06-10.
-'Adicionadas: collectionTimestamp, metricas IOQueue, runAvgScriptTime,
-'metricas Remote e runUptimeMinutes.
-'Correcao da versao 1.9:
-'- runErrorsPerMinute agora calcula a variacao de Errors entre coletas
-'  consecutivas, dividida pelo tempo real decorrido em minutos.
-'Correcao da versao 1.9.1:
-'- Tail de leitura aumentado para 2 MB para capturar registros recentes
-'  que fiquem fora do ultimo 1 MB do ETL.
-'- Janela apos cada marcador aumentada para 2000 caracteres, reduzindo
-'  perda de metricas quando a linha ProcessInfo vem mais extensa.
+'Version 2.0.0 - 2026-07-30
+
 Option Explicit
 
-Const ETL_SOURCE_FOLDER = "F:\eeLogs\E3\E3"
+Const ETL_SOURCE_FOLDER = "F:\eeLogs\E3"
 Const LOG_FILE_PREFIX = "E3_"
-Const INITIAL_TAIL_READ_MB = 2
+Const INITIAL_TAIL_READ_MB = 1
 Const TAIL_READ_STEP_MB = 1
-Const MAX_TAIL_READ_MB = 2
-Const MAX_TEXT_AFTER_MARKER = 2000
+Const MAX_TAIL_READ_MB = 1
+Const MAX_TEXT_AFTER_MARKER = 2500
 Const MAX_SKIP_CHUNK = 50000000
 Const USE_INCREMENTAL_TAIL_READ = True
 Const ROLLING_BUFFER_MAX_CHARS = 1048576
@@ -34,6 +24,11 @@ Dim tailStreamGlobal
 Dim tailFilePathGlobal
 Dim tailFileSizeGlobal
 Dim rollingTailTextGlobal
+Dim etlSizeGlobal
+Dim etlModifiedGlobal
+Dim incrementRequestedGlobal
+Dim incrementReceivedGlobal
+Dim rollingBufferCharsGlobal
 
 Dim runCPU
 Dim runPVT
@@ -124,6 +119,11 @@ Sub ResetOutputs(msg)
     totalTime = ""
     readModeGlobal = ""
     collectionTimestamp = ""
+    etlSizeGlobal = ""
+    etlModifiedGlobal = ""
+    incrementRequestedGlobal = ""
+    incrementReceivedGlobal = ""
+    rollingBufferCharsGlobal = ""
 End Sub
 
 Sub UpdateValueIfFound(ByRef currentValue, ByVal newValue)
@@ -217,7 +217,7 @@ Sub OnRead_trigger(r, v)
                 End If
 
                 statusGlobal = "Success"
-                statusMsgGlobal = "Leitura concluida; tail=" & CStr(tailUsedMb) & " MB; modo=" & readModeGlobal
+                statusMsgGlobal = "Leitura concluida; tail=" & CStr(tailUsedMb) & " MB; modo=" & readModeGlobal & "; inc=" & incrementReceivedGlobal & "/" & incrementRequestedGlobal & "; buffer=" & rollingBufferCharsGlobal
 
             Else
                 statusGlobal = "Fail"
@@ -306,6 +306,8 @@ Function FindLatestEtl(ByRef latestPath, ByRef latestSize, ByRef statusMsg)
         Exit Function
     End If
 
+    etlSizeGlobal = CStr(latestSize)
+    etlModifiedGlobal = FormatDateTimeIso(latestDate)
     FindLatestEtl = True
 End Function
 
@@ -383,6 +385,9 @@ End Function
 
 Function ReadTailWindow(ByVal latestPath, ByVal latestSize, ByVal tailReadMb, ByRef rawData, ByRef statusMsg)
     readModeGlobal = ""
+    incrementRequestedGlobal = ""
+    incrementReceivedGlobal = ""
+    rollingBufferCharsGlobal = ""
 
     If USE_INCREMENTAL_TAIL_READ Then
         If ReadTailWindowIncremental(latestPath, latestSize, tailReadMb, rawData, statusMsg) Then
@@ -419,6 +424,8 @@ Function ReadTailWindowIncremental(ByVal latestPath, ByVal latestSize, ByVal tai
             Exit Function
         End If
 
+        SetReadDiagnostic tailBytes, Len(rollingTailTextGlobal)
+        If Len(rollingTailTextGlobal) <> tailBytes Then readModeGlobal = "inc-open-partial"
         rawData = rollingTailTextGlobal
         ReadTailWindowIncremental = True
         Exit Function
@@ -431,6 +438,12 @@ Function ReadTailWindowIncremental(ByVal latestPath, ByVal latestSize, ByVal tai
             Exit Function
         End If
 
+        SetReadDiagnostic tailBytes, Len(rollingTailTextGlobal)
+        If Len(rollingTailTextGlobal) <> tailBytes Then
+            readModeGlobal = "inc-reopen-partial"
+        Else
+            readModeGlobal = "inc-reopen"
+        End If
         rawData = rollingTailTextGlobal
         ReadTailWindowIncremental = True
         Exit Function
@@ -440,6 +453,7 @@ Function ReadTailWindowIncremental(ByVal latestPath, ByVal latestSize, ByVal tai
 
     If newBytes > 0 Then
         readModeGlobal = "inc-read"
+        SetReadDiagnostic newBytes, 0
         Err.Clear
         newData = tailStreamGlobal.Read(CLng(newBytes))
 
@@ -449,6 +463,9 @@ Function ReadTailWindowIncremental(ByVal latestPath, ByVal latestSize, ByVal tai
             Exit Function
         End If
 
+        SetReadDiagnostic newBytes, Len(newData)
+        If Len(newData) <> newBytes Then readModeGlobal = "inc-read-partial"
+
         If Len(newData) > 0 Then
             rollingTailTextGlobal = rollingTailTextGlobal & newData
             TrimRollingTailBuffer
@@ -457,8 +474,10 @@ Function ReadTailWindowIncremental(ByVal latestPath, ByVal latestSize, ByVal tai
         tailFileSizeGlobal = latestSize
     Else
         readModeGlobal = "inc-cache"
+        SetReadDiagnostic 0, 0
     End If
 
+    rollingBufferCharsGlobal = CStr(Len(rollingTailTextGlobal))
     rawData = rollingTailTextGlobal
     ReadTailWindowIncremental = True
 End Function
@@ -587,6 +606,10 @@ Function ReadTailWindowWithTextStream(ByVal latestPath, ByVal latestSize, ByVal 
         Exit Function
     End If
 
+    SetReadDiagnostic tailBytes, Len(rawData)
+    rollingBufferCharsGlobal = CStr(Len(rawData))
+    If Len(rawData) <> tailBytes Then readModeGlobal = "fallback-text-partial"
+
     ts.Close
     ReadTailWindowWithTextStream = True
 End Function
@@ -595,6 +618,11 @@ Sub TrimRollingTailBuffer()
     If Len(rollingTailTextGlobal) > ROLLING_BUFFER_MAX_CHARS Then
         rollingTailTextGlobal = Right(rollingTailTextGlobal, ROLLING_BUFFER_MAX_CHARS)
     End If
+End Sub
+
+Sub SetReadDiagnostic(ByVal requestedAmount, ByVal receivedAmount)
+    incrementRequestedGlobal = CStr(requestedAmount)
+    incrementReceivedGlobal = CStr(receivedAmount)
 End Sub
 
 Sub CloseTailStream()
@@ -1179,6 +1207,30 @@ End Sub
 
 Sub OnRead_collectionTimestamp(r, v)
     v.Value = collectionTimestamp
+End Sub
+
+Sub OnRead_readMode(r, v)
+    v.Value = readModeGlobal
+End Sub
+
+Sub OnRead_etlSize(r, v)
+    v.Value = etlSizeGlobal
+End Sub
+
+Sub OnRead_etlModified(r, v)
+    v.Value = etlModifiedGlobal
+End Sub
+
+Sub OnRead_incrementRequested(r, v)
+    v.Value = incrementRequestedGlobal
+End Sub
+
+Sub OnRead_incrementReceived(r, v)
+    v.Value = incrementReceivedGlobal
+End Sub
+
+Sub OnRead_rollingBufferChars(r, v)
+    v.Value = rollingBufferCharsGlobal
 End Sub
 
 Sub OnRead_status(r, v)
