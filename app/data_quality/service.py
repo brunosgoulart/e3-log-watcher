@@ -26,7 +26,7 @@ def assess_quality(event: PiEvent, policy: QualityConfig, acquisition: Acquisiti
     return QualityAssessment(True, None)
 
 
-def classify_collection_timestamp(
+def classify_source_timestamp(
     previous: datetime | None,
     current: datetime | None,
     observed_at: datetime,

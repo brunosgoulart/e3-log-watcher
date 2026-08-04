@@ -4,7 +4,7 @@ from datetime import timedelta
 from numbers import Real
 
 from app.config.models import AppConfig
-from app.data_quality.service import classify_collection_timestamp
+from app.data_quality.service import classify_source_timestamp
 from app.domain.models import (
     GroupObservation,
     GroupRuntimeState,
@@ -38,9 +38,9 @@ class RedundancyStateMachine:
                 ["PI acquisition did not complete successfully"],
                 0.95,
             )
-        classification = classify_collection_timestamp(
-            runtime.previous_collection_timestamp,
-            observation.collection_timestamp,
+        classification = classify_source_timestamp(
+            runtime.previous_source_timestamp,
+            observation.source_timestamp,
             observation.observed_at,
             self._config.acquisition,
         )
@@ -55,8 +55,8 @@ class RedundancyStateMachine:
             )
         status = observation.metrics.get("E3Server.Status")
         age = (
-            (observation.observed_at - observation.collection_timestamp).total_seconds()
-            if observation.collection_timestamp
+            (observation.observed_at - observation.source_timestamp).total_seconds()
+            if observation.source_timestamp
             else None
         )
         if (
@@ -70,7 +70,7 @@ class RedundancyStateMachine:
                 observation,
                 RedundancyState.APPLICATION_UNAVAILABLE,
                 classification,
-                ["configured unavailable E3Server.Status", "collection timestamp exceeded unavailable timeout"],
+                ["configured unavailable E3Server.Status", "latest numeric PI event exceeded unavailable timeout"],
                 0.8,
             )
         if classification == SampleClassification.STALE:
@@ -79,7 +79,7 @@ class RedundancyStateMachine:
                 observation,
                 RedundancyState.STALE,
                 classification,
-                ["CollectionTimeStamp did not advance within stale tolerance"],
+                ["latest valid numeric PI event did not advance within stale tolerance"],
                 0.85,
             )
         if classification in {SampleClassification.MISSING, SampleClassification.OUT_OF_ORDER}:
@@ -88,7 +88,7 @@ class RedundancyStateMachine:
                 observation,
                 RedundancyState.UNKNOWN,
                 classification,
-                [f"collection sample classified as {classification.value}"],
+                [f"numeric PI sample classified as {classification.value}"],
                 0.3,
             )
         evidence = self._switchover_evidence(runtime, observation, classification)
@@ -143,7 +143,7 @@ class RedundancyStateMachine:
             return decision
         if classification == SampleClassification.REPEATED:
             target = runtime.state if runtime.state == RedundancyState.ACTIVE_COLLECTING else RedundancyState.INITIALIZING
-            return self._decision(runtime, observation, target, classification, ["CollectionTimeStamp repeated but is not stale"], 0.55)
+            return self._decision(runtime, observation, target, classification, ["latest numeric PI event repeated but is not stale"], 0.55)
         valid_samples = runtime.valid_samples + 1
         target = (
             RedundancyState.ACTIVE_COLLECTING
@@ -155,7 +155,7 @@ class RedundancyStateMachine:
             observation,
             target,
             classification,
-            ["CollectionTimeStamp advanced and group quality is acceptable"],
+            ["latest numeric PI event advanced and group quality is acceptable"],
             0.75 if target == RedundancyState.ACTIVE_COLLECTING else 0.5,
             start_new_session=runtime.session_id is None,
             session_reason="initial_valid_collection" if runtime.session_id is None else None,
@@ -216,13 +216,13 @@ class RedundancyStateMachine:
             updated.state_since = observation.observed_at
         if classification not in {SampleClassification.MISSING, SampleClassification.OUT_OF_ORDER}:
             if (
-                observation.collection_timestamp is not None
+                observation.source_timestamp is not None
                 and (
-                    updated.previous_collection_timestamp is None
-                    or observation.collection_timestamp >= updated.previous_collection_timestamp
+                    updated.previous_source_timestamp is None
+                    or observation.source_timestamp >= updated.previous_source_timestamp
                 )
             ):
-                updated.previous_collection_timestamp = observation.collection_timestamp
+                updated.previous_source_timestamp = observation.source_timestamp
             updated.previous_metrics = observation.metrics
         updated.last_quality_ratio = observation.quality_ratio
         updated.last_missing_metrics = observation.missing_metrics

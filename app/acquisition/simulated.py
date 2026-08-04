@@ -71,9 +71,7 @@ class SimulatedPiClient(PiClient):
 
     def _synthetic_event(self, tag: str, timestamp: datetime, sequence: int) -> PiEvent:
         suffix = self._config.suffix_for_tag(tag)
-        if suffix == "CollectionTimeStamp":
-            value = timestamp.astimezone(ZoneInfo(self._config.pi_system.timezone)).isoformat()
-        elif suffix == "FileRead":
+        if suffix == "FileRead":
             value = f"SYNTHETIC_E3_{timestamp:%Y%m%d_%H%M}.etl"
         elif suffix == "E3Server.Status":
             value = "SYNTHETIC_RUNNING"

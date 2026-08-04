@@ -6,6 +6,8 @@ pi_system:
   # AF Server permanece opcional porque não é necessário para consultar PIPoints diretamente.
   af_server: "${PI_AF_SERVER}"
   data_archive: "PIDATAPRO"
+  # Opcional: caminho do OSIsoft.AFSDK.dll quando ele não estiver no GAC.
+  af_sdk_assembly_path: "${PI_AFSDK_PATH}"
   authentication_method: "windows_integrated"
   request_timeout_seconds: 30
   retry_attempts: 3
@@ -58,7 +60,6 @@ server_groups:
 # Units are deliberately null until confirmed against the PI metadata.
 # E3Server.Status remains unknown because its returned domain has not been provided.
 metric_catalog:
-  CollectionTimeStamp: {expected_type: "datetime", category: "collection", unit: null, enabled: true}
   E3Run.AvgScriptTime: {expected_type: "number", category: "script", unit: null, enabled: true}
   E3Run.CPU: {expected_type: "number", category: "resource", unit: null, enabled: true}
   E3Run.DiscardedEvents: {expected_type: "number", category: "event", unit: null, enabled: true}
@@ -99,9 +100,86 @@ quality:
   bad_quality_values: ["Bad"]
   minimum_group_quality_ratio: 0.75
 
+# Phase 2: statistical rules only. No supervised or unsupervised ML is used.
+analysis:
+  baseline_minimum_samples: 30
+  robust_z_threshold: 3.5
+  minimum_relative_baseline_width: 0.05
+  trend_window_samples: 12
+  minimum_relative_slope_per_hour: 0.05
+  alarm_open_persistence: 3
+  alarm_resolve_hysteresis: 2
+  composite_rules:
+    - rule_id: "script_processing_pressure"
+      title: "Possível degradação no processamento de scripts"
+      severity: "warning"
+      metric_suffixes: ["E3Run.Occupancy", "E3Run.AvgScriptTime", "E3Run.CPU"]
+      minimum_confirmations: 2
+      risk_weight: 30
+    - rule_id: "io_queue_backlog"
+      title: "Possível represamento na fila de I/O"
+      severity: "warning"
+      metric_suffixes: ["ioQueue.Pending", "ioQueue.AvgDelay"]
+      minimum_confirmations: 2
+      risk_weight: 25
+    - rule_id: "memory_pressure"
+      title: "Possível pressão de memória"
+      severity: "warning"
+      metric_suffixes: ["E3Run.Memory", "E3Run.PageFaults", "E3Run.PVT"]
+      minimum_confirmations: 2
+      risk_weight: 25
+    - rule_id: "event_backlog"
+      title: "Possível represamento de eventos"
+      severity: "warning"
+      metric_suffixes: ["E3Run.PendingEvents", "E3Run.RemotePending", "E3Run.DiscardedEvents"]
+      minimum_confirmations: 2
+      risk_weight: 30
+
+forecasting:
+  enabled: true
+  minimum_samples: 30
+  horizon_hours: 4
+  minimum_r_squared: 0.70
+  metric_suffixes:
+    - "E3Run.Memory"
+    - "E3Run.HDL"
+    - "E3Run.TRD"
+    - "ioQueue.Pending"
+    - "ioQueue.AvgDelay"
+    - "E3Run.PendingEvents"
+    - "E3Run.RemotePending"
+  # Keep empty until real units and operational limits are approved.
+  static_limits: {}
+
+backtesting:
+  warmup_samples: 30
+  include_stabilizing: false
+  report_timezone: "America/Sao_Paulo"
+
+api:
+  allow_unauthenticated_read: true
+  admin_api_key_env: "E3_MONITOR_ADMIN_API_KEY"
+
+notifications:
+  enabled: false
+  minimum_severity: "warning"
+
+phase5:
+  deployment_mode: "shadow"
+  minimum_valid_ratio: 0.90
+  minimum_feature_rows: 200
+  contamination: 0.01
+  feature_metric_suffixes:
+    - "E3Run.CPU"
+    - "E3Run.Memory"
+    - "E3Run.Occupancy"
+    - "E3Run.AvgScriptTime"
+    - "ioQueue.Pending"
+  # Comparison results are audit-only until a controlled approval is recorded.
+  allow_alarm_influence: false
+
 # Closed allow-list. No client may query a tag outside this list.
 authorized_tags:
-  - "CSEO.COGCGPRO12.CollectionTimeStamp"
   - "CSEO.COGCGPRO12.E3Run.AvgScriptTime"
   - "CSEO.COGCGPRO12.E3Run.CPU"
   - "CSEO.COGCGPRO12.E3Run.DiscardedEvents"
@@ -127,7 +205,6 @@ authorized_tags:
   - "CSEO.COGCGPRO12.ioQueue.AvgDelay"
   - "CSEO.COGCGPRO12.ioQueue.Pending"
   - "CSEO.COGCGPRO12.TotalTime"
-  - "CSEO.COGCGPRO34.CollectionTimeStamp"
   - "CSEO.COGCGPRO34.E3Run.AvgScriptTime"
   - "CSEO.COGCGPRO34.E3Run.CPU"
   - "CSEO.COGCGPRO34.E3Run.DiscardedEvents"
@@ -153,7 +230,6 @@ authorized_tags:
   - "CSEO.COGCGPRO34.ioQueue.AvgDelay"
   - "CSEO.COGCGPRO34.ioQueue.Pending"
   - "CSEO.COGCGPRO34.TotalTime"
-  - "CSEO.COGCGPRO56.CollectionTimeStamp"
   - "CSEO.COGCGPRO56.E3Run.AvgScriptTime"
   - "CSEO.COGCGPRO56.E3Run.CPU"
   - "CSEO.COGCGPRO56.E3Run.DiscardedEvents"

@@ -4,11 +4,11 @@ from app.domain.models import GroupObservation, RedundancyState
 from app.redundancy.state_machine import RedundancyStateMachine
 
 
-def _observation(timestamp, collection_timestamp, uptime=100.0, errors=10.0, file_read="a.etl", status="RUNNING", quality=1.0):
+def _observation(timestamp, source_timestamp, uptime=100.0, errors=10.0, file_read="a.etl", status="RUNNING", quality=1.0):
     return GroupObservation(
         group_id="COGCGPRO12",
         observed_at=timestamp,
-        collection_timestamp=collection_timestamp,
+        source_timestamp=source_timestamp,
         metrics={
             "E3Run.UpTimeMinutes": uptime,
             "FileRead": file_read,

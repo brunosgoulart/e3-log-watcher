@@ -1,7 +1,7 @@
 {
   "synthetic": true,
-  "normal": {"collection_timestamp": "2026-01-01T12:00:00-03:00", "uptime_minutes": 100},
-  "stale": {"collection_timestamp": "2026-01-01T12:00:00-03:00", "observed_at": "2026-01-01T12:06:00-03:00"},
+  "normal": {"source_timestamp": "2026-01-01T12:00:00-03:00", "uptime_minutes": 100},
+  "stale": {"source_timestamp": "2026-01-01T12:00:00-03:00", "observed_at": "2026-01-01T12:06:00-03:00"},
   "acquisition_failure": {"error": "synthetic PI client error"},
   "uptime_reset": {"previous": 100, "current": 3},
   "counter_reset": {"previous": 40, "current": 1},

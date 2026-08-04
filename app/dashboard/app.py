@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from html import escape
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
 from app.config.models import AppConfig
+from app.domain.models import OperationalLabel
+from app.phase5.service import ShadowModelComparisonService
 from app.storage.sqlite import SqliteRepository
 
 
@@ -21,6 +25,65 @@ def create_dashboard_app(repository: SqliteRepository, config: AppConfig) -> Fas
     def metrics(group_id: str) -> list[dict]:
         _assert_group(config, group_id)
         return repository.metric_history(group_id)
+
+    @app.get("/api/analysis")
+    def analysis() -> dict:
+        return repository.latest_analysis_by_group()
+
+    @app.get("/api/forecasts")
+    def forecasts(group_id: str | None = None) -> list[dict]:
+        if group_id:
+            _assert_group(config, group_id)
+        return repository.latest_forecasts(group_id)
+
+    @app.get("/health")
+    def health() -> dict:
+        latest = repository.latest_acquisition()
+        if latest is None:
+            return {"status": "degraded", "reason": "no acquisition recorded"}
+        acquired_at = datetime.fromisoformat(latest["acquired_at"])
+        age = max(0, int((datetime.now(timezone.utc) - acquired_at).total_seconds()))
+        limit = config.acquisition.online_interval_seconds * 3
+        status = "ok" if latest["success"] and age <= limit else "degraded"
+        return {"status": status, "last_acquisition_at": latest["acquired_at"], "age_seconds": age}
+
+    @app.get("/api/labels")
+    def labels(group_id: str | None = None) -> list[dict]:
+        if group_id:
+            _assert_group(config, group_id)
+        return repository.list_operational_labels(group_id)
+
+    @app.get("/api/quality")
+    def quality() -> list[dict]:
+        return [
+            report.model_dump(mode="json")
+            for report in repository.historical_quality_reports(
+                config.phase5.minimum_valid_ratio, config.phase5.minimum_feature_rows
+            )
+        ]
+
+    @app.get("/api/model-experiments")
+    def model_experiments() -> list[dict]:
+        return repository.latest_model_experiments()
+
+    @app.get("/api/supervised-readiness")
+    def supervised_readiness() -> dict:
+        return ShadowModelComparisonService(config.phase5).supervised_readiness(repository)
+
+    @app.post("/api/admin/labels", status_code=201)
+    def create_label(payload: LabelRequest, x_api_key: str | None = Header(default=None)) -> dict:
+        _require_admin(config, x_api_key)
+        _assert_group(config, payload.group_id)
+        label = OperationalLabel(
+            group_id=payload.group_id,
+            started_at=payload.started_at,
+            ended_at=payload.ended_at,
+            label_type=payload.label_type,
+            note=payload.note,
+            created_at=datetime.now(timezone.utc),
+        )
+        repository.create_operational_label(label)
+        return label.model_dump(mode="json")
 
     @app.get("/api/alarms")
     def alarms(group_id: str | None = None) -> list[dict]:
@@ -49,6 +112,22 @@ def create_dashboard_app(repository: SqliteRepository, config: AppConfig) -> Fas
     return app
 
 
+class LabelRequest(BaseModel):
+    group_id: str
+    started_at: datetime
+    ended_at: datetime | None = None
+    label_type: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+def _require_admin(config: AppConfig, supplied_key: str | None) -> None:
+    expected_key = os.getenv(config.api.admin_api_key_env)
+    if not expected_key:
+        raise HTTPException(status_code=503, detail="Administrative API is not configured")
+    if not supplied_key or supplied_key != expected_key:
+        raise HTTPException(status_code=403, detail="Administrative API authentication failed")
+
+
 def _assert_group(config: AppConfig, group_id: str) -> None:
     if group_id not in {group.group_id for group in config.server_groups}:
         raise HTTPException(status_code=404, detail="Unknown logical group")
@@ -56,6 +135,7 @@ def _assert_group(config: AppConfig, group_id: str) -> None:
 
 def _group_cards(repository: SqliteRepository, config: AppConfig) -> list[dict]:
     states = {row["group_id"]: row for row in repository.latest_state_cards()}
+    analysis_by_group = repository.latest_analysis_by_group()
     open_alarm_count = {group.group_id: 0 for group in config.server_groups}
     for alarm in repository.list_alarms():
         if alarm["status"] == "OPEN":
@@ -64,11 +144,12 @@ def _group_cards(repository: SqliteRepository, config: AppConfig) -> list[dict]:
     cards: list[dict] = []
     for group in config.server_groups:
         state = states.get(group.group_id)
+        analysis = analysis_by_group.get(group.group_id, {})
         runtime = state["runtime"] if state else {}
-        collection_timestamp = runtime.get("previous_collection_timestamp")
+        source_timestamp = runtime.get("previous_source_timestamp")
         age_seconds = None
-        if collection_timestamp:
-            timestamp = datetime.fromisoformat(collection_timestamp)
+        if source_timestamp:
+            timestamp = datetime.fromisoformat(source_timestamp)
             age_seconds = max(0, int((now - timestamp).total_seconds()))
         cards.append(
             {
@@ -76,12 +157,13 @@ def _group_cards(repository: SqliteRepository, config: AppConfig) -> list[dict]:
                 "display_name": "/".join(group.physical_servers),
                 "state": state["state"] if state else "INITIALIZING",
                 "acquisition_state": state["state"] if state else "INITIALIZING",
-                "last_valid_collection": collection_timestamp,
+                "last_valid_collection": source_timestamp,
                 "data_age_seconds": age_seconds,
                 "session_id": runtime.get("session_id"),
                 "uptime": runtime.get("previous_metrics", {}).get("E3Run.UpTimeMinutes"),
-                "risk_index": None,
-                "analysis_confidence": state["confidence"] if state else 0,
+                "risk_index": analysis.get("risk_index"),
+                "analysis_confidence": analysis.get("confidence", state["confidence"] if state else 0),
+                "baseline_ready": analysis.get("baseline_ready", False),
                 "quality_ratio": runtime.get("last_quality_ratio", 0),
                 "active_alarms": open_alarm_count[group.group_id],
                 "possible_switchover": state is not None and state["state"] in {"SWITCHOVER_SUSPECTED", "POST_SWITCHOVER_STABILIZING"},
@@ -95,11 +177,12 @@ def _group_cards(repository: SqliteRepository, config: AppConfig) -> list[dict]:
 def _card_html(card: dict) -> str:
     items = [
         ("Estado", card["state"]),
-        ("Última coleta válida", card["last_valid_collection"] or "indisponível"),
+        ("Última atualização PI válida", card["last_valid_collection"] or "indisponível"),
         ("Idade dos dados", f"{card['data_age_seconds']} s" if card["data_age_seconds"] is not None else "indisponível"),
         ("Sessão", card["session_id"] or "não iniciada"),
         ("Uptime", card["uptime"] if card["uptime"] is not None else "indisponível"),
-        ("Risco", "não calculado na Fase 1"),
+        ("Risco", card["risk_index"] if card["risk_index"] is not None else "baseline ainda insuficiente"),
+        ("Baseline", "pronta" if card["baseline_ready"] else "aguardando amostras válidas"),
         ("Confiança", f"{card['analysis_confidence']:.0%}"),
         ("Qualidade", f"{card['quality_ratio']:.0%}"),
         ("Alarmes ativos", card["active_alarms"]),
@@ -145,4 +228,4 @@ def _page(title: str, content: str) -> str:
     table{{width:100%;border-collapse:collapse;font-size:.9rem}} th,td{{padding:8px;text-align:left;border-bottom:1px solid #2a425a}}
     .alarm.warning{{border-left:5px solid #e6b34a}} .alarm.critical{{border-left:5px solid #ef6767}} .alarm.info{{border-left:5px solid #60b9e8}}
     .alarm span{{display:block;color:#a8bacb;margin-top:6px}} @media(max-width:600px){{body{{padding:12px}} dl{{grid-template-columns:1fr}} table{{display:block;overflow-x:auto}}}}
-    </style></head><body><header><h1>E3 Predictive Monitor — Fase 1</h1><p>Dados PI, qualidade e redundância. Não há diagnóstico preditivo nesta fase.</p></header>{content}</body></html>"""
+    </style></head><body><header><h1>E3 Predictive Monitor — Fase 2</h1><p>Dados PI, qualidade, redundância e análise estatística explicável. Sem machine learning.</p></header>{content}</body></html>"""

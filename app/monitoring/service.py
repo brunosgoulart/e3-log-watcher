@@ -8,8 +8,12 @@ from typing import Sequence
 from uuid import uuid4
 
 from app.acquisition.interfaces import PiClient, PiClientError
+from app.alarms.composite import CompositeAlarmService
 from app.alarms.service import PhaseOneAlarmService
 from app.config.models import AppConfig
+from app.detection.service import PhaseTwoAnalysisService
+from app.forecasting.service import ForecastService
+from app.notifications.service import NotificationService
 from app.domain.models import GroupObservation, GroupRuntimeState
 from app.normalization.normalizer import EventNormalizer
 from app.redundancy.state_machine import RedundancyStateMachine
@@ -29,6 +33,10 @@ class MonitoringService:
         self._state_machine = RedundancyStateMachine(config)
         self._sessions = SessionService()
         self._alarms = PhaseOneAlarmService()
+        self._analysis = PhaseTwoAnalysisService(config.analysis)
+        self._composite_alarms = CompositeAlarmService(config.analysis)
+        self._forecasting = ForecastService(config.forecasting)
+        self._notifications = NotificationService(config.notifications, logger)
         self._runtime: dict[str, GroupRuntimeState] = repository.latest_runtime_states()
 
     def run_once(self) -> int:
@@ -75,6 +83,7 @@ class MonitoringService:
             self._repository.record_state(decision, observation.observed_at)
             self._alarms.synchronize(self._repository, decision, observation)
             self._runtime[observation.group_id] = decision.runtime
+            self._run_phase_two_analysis(observation, decision.runtime, batch.acquisition_id)
             self._logger.info(
                 "Group state updated",
                 extra={"event": "state_updated", "group_id": observation.group_id, "state": decision.runtime.state.value},
@@ -84,6 +93,38 @@ class MonitoringService:
             extra={"event": "acquisition_completed", "acquisition_id": batch.acquisition_id, "count": len(batch.events)},
         )
         return len(normalized)
+
+    def _run_phase_two_analysis(
+        self, observation: GroupObservation, runtime: GroupRuntimeState, acquisition_id: str
+    ) -> None:
+        if runtime.state.value != "ACTIVE_COLLECTING" or runtime.session_id is None:
+            return
+        session_started_at = self._repository.session_started_at(runtime.session_id)
+        if session_started_at is None:
+            self._logger.warning(
+                "Analysis skipped because session metadata is unavailable",
+                extra={"event": "analysis_skipped", "group_id": observation.group_id},
+            )
+            return
+        history = self._repository.numeric_history(
+            observation.group_id, session_started_at, exclude_acquisition_id=acquisition_id
+        )
+        profiles, result, rules = self._analysis.evaluate(observation, runtime.session_id, history)
+        self._repository.store_baselines(profiles)
+        self._repository.store_analysis_result(result)
+        opened_alarms = self._composite_alarms.synchronize(self._repository, result, rules)
+        self._notifications.notify(opened_alarms)
+        forecast_history = {suffix: list(values) for suffix, values in history.items()}
+        for suffix, value in observation.metrics.items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                forecast_history.setdefault(suffix, []).append((observation.observed_at, float(value)))
+        self._repository.store_forecasts(
+            self._forecasting.project(observation.group_id, runtime.session_id, observation.observed_at, forecast_history)
+        )
+        self._logger.info(
+            "Phase 2 analysis completed",
+            extra={"event": "analysis_completed", "group_id": observation.group_id, "count": len(result.signals)},
+        )
 
     def import_historical(self, start: datetime, end: datetime) -> int:
         """Store historical events in arrival order; no future data feeds online state."""
@@ -131,7 +172,7 @@ class MonitoringService:
         return GroupObservation(
             group_id=group_id,
             observed_at=now,
-            collection_timestamp=None,
+            source_timestamp=None,
             metrics={},
             metric_validity={},
             quality_ratio=0,

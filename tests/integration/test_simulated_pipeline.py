@@ -17,7 +17,7 @@ from app.observability.logging import configure_logging
 def test_simulated_current_acquisition_persists_and_renders_dashboard(config, repository):
     client = SimulatedPiClient(config, clock=datetime(2026, 1, 1, tzinfo=timezone.utc))
     service = MonitoringService(config, client, repository, configure_logging("WARNING"))
-    assert service.run_once() == 78
+    assert service.run_once() == 75
     client.advance(60)
     service.run_once()
     client.advance(60)
@@ -25,7 +25,7 @@ def test_simulated_current_acquisition_persists_and_renders_dashboard(config, re
     cards = repository.latest_state_cards()
     assert len(cards) == 3
     assert all(card["state"] == "ACTIVE_COLLECTING" for card in cards)
-    assert len(repository.metric_history("COGCGPRO12")) == 78
+    assert len(repository.metric_history("COGCGPRO12")) == 75
     response = TestClient(create_dashboard_app(repository, config)).get("/")
     assert response.status_code == 200
     assert "COGCGPRO1/COGCGPRO2" in response.text
@@ -37,7 +37,7 @@ def test_historical_import_does_not_change_online_runtime(config, repository):
     count = service.import_historical(
         datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 1, 1, 0, 2, tzinfo=timezone.utc)
     )
-    assert count == 78 * 3
+    assert count == 75 * 3
     assert repository.latest_runtime_states() == {}
 
 

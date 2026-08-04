@@ -15,7 +15,7 @@ O cliente real requer, antes da homologação:
 
 1. AF Server, somente se ele for necessário para futura consulta a elementos AF; o PI Data Archive foi configurado como `PIDATAPRO`, conforme caminho `\\PIDATAPRO\CSEO.COGCGPRO34.E3Run.TRD` informado;
 2. versão do PI AF SDK compatível com o Windows e Python corporativos;
-3. conta Windows integrada e permissões de leitura somente nas tags fechadas;
+3. conta Windows integrada e permissões de leitura somente nas 75 tags numéricas fechadas; `CollectionTimeStamp` foi removida e freshness usa o timestamp PI mais recente das métricas numéricas válidas;
 4. exemplos reais, sem dados sensíveis, de timestamp, qualidade, status e valor;
 5. intervalo esperado, histórico disponível, timezone e política de publicação do dashboard.
 

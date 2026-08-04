@@ -7,7 +7,7 @@ ativo e não executa modelos de machine learning.
 
 ## Escopo entregue
 
-- Lista fechada, validada e explícita das 78 tags autorizadas (26 por grupo).
+- Lista fechada, validada e explícita das 75 tags numéricas autorizadas (25 por grupo).
 - Interface `PiClient`, cliente simulado e adaptador Windows para PI AF SDK.
 - Aquisição atual, importação histórica e execução contínua com retentativas.
 - Armazenamento separado de dados brutos, normalizados, sessões, estados e alarmes.
@@ -16,6 +16,8 @@ ativo e não executa modelos de machine learning.
   `POST_SWITCHOVER_STABILIZING`, `ACQUISITION_FAILURE`,
   `APPLICATION_UNAVAILABLE` e `UNKNOWN`.
 - Dashboard local responsivo, com visão dos três grupos, detalhe de métricas e alarmes textuais.
+- Baseline robusta por mediana/MAD, limites dinâmicos, tendência relativa, regras compostas,
+  índice de risco, persistência e histerese de alarmes.
 - Testes unitários e de integração que usam exclusivamente dados sintéticos.
 
 O código do coletor VBScript existente não é utilizado nem alterado pela aplicação.
@@ -52,10 +54,11 @@ do PI AF SDK e defina apenas os identificadores não secretos:
 
 ```powershell
 $env:PI_AF_SERVER = "nome-do-af-server" # opcional para a consulta direta de PIPoints
+$env:PI_AFSDK_PATH = "C:\Program Files (x86)\PIPC\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll" # opcional
 ```
 
 A autenticação é Windows Integrated Authentication. A conta de execução deve
-ter somente leitura das 78 tags autorizadas. Senhas, tokens e certificados não
+ter somente leitura das 75 tags autorizadas. Senhas, tokens e certificados não
 devem ser inseridos em `configs/phase1.yaml`, `.env.example` ou logs.
 
 ## Execução segura com dados sintéticos
@@ -87,23 +90,39 @@ estiverem disponíveis.
 
 ## Configuração
 
-`configs/phase1.yaml` contém as 78 tags explícitas, grupos hot/standby,
+`configs/phase1.yaml` contém as 75 tags numéricas explícitas, grupos hot/standby,
 parâmetros de aquisição, políticas de qualidade e regras iniciais de
 switchover. Ele é validado na inicialização; a aplicação encerra caso haja
 tags duplicadas, ausentes, externas à lista ou grupos inválidos.
 
 O PI Data Archive foi configurado como `PIDATAPRO`, conforme o caminho
 `\\PIDATAPRO\CSEO.COGCGPRO34.E3Run.TRD`: `CSEO.COGCGPRO34.E3Run.TRD` é o nome
-da tag/PIPoint. Os tipos configurados para `CollectionTimeStamp`, `FileRead` e
+da tag/PIPoint. `CollectionTimeStamp` foi removida da allow-list pois o PI a
+fornece como texto. Os tipos configurados para `FileRead` e
 `E3Server.Status` devem ser confirmados em homologação. Unidades permanecem
 `null` até confirmação pelo PI. Os valores de `E3Server.Status` que representam
 indisponibilidade também permanecem vazios por segurança: sem semântica
 confirmada, a aplicação não declara indisponibilidade.
 
+## Análise estatística da Fase 2
+
+Nenhum perfil é formado antes de 30 amostras válidas da mesma sessão operacional.
+O baseline usa mediana e desvio absoluto mediano (MAD), portanto não é influenciado
+por um único pico. Os limites são dinâmicos e cada sinal de alarme mostra valor,
+intervalo de baseline, z-score robusto e tendência relativa por hora.
+
+As regras compostas exigem confirmação entre métricas relacionadas: scripts,
+fila de I/O, memória e eventos. Um alerta exige três avaliações consecutivas e
+fecha após duas avaliações sem evidência. Pesos, janelas, persistência e regras
+ficam em `configs/phase1.yaml`; não há limiar operacional fixo oculto no código.
+
+O cálculo é suspenso fora de `ACTIVE_COLLECTING`, sem sessão, com baixa qualidade
+ou sem baseline suficiente. Ele não usa ML, dados de outra sessão nem dados futuros.
+
 ## Qualidade, estados e sessões
 
-`CollectionTimeStamp` é o sinal principal de novidade. A aplicação distingue
-evento PI, coleta E3 e instante de aquisição. Valores ruins, questionáveis ou
+O timestamp mais recente entre eventos PI numéricos válidos é o sinal de
+novidade. A aplicação distingue evento PI e instante de aquisição. Valores ruins, questionáveis ou
 substituídos nunca são reescritos; a política YAML define somente se participam
 da análise. `STALE` requer PI acessível e timestamp de coleta sem avanço.
 `ACQUISITION_FAILURE` representa falha de consulta, não degradação E3.
@@ -127,7 +146,7 @@ diagnóstico preditivo nesta fase.
 
 ## Critérios objetivos de conclusão da Fase 1
 
-1. O YAML valida exatamente 78 tags, três grupos e 26 tags por grupo.
+1. O YAML valida exatamente 75 tags numéricas, três grupos e 25 tags por grupo.
 2. Uma solicitação não autorizada é bloqueada antes do adaptador PI.
 3. Eventos brutos e normalizados são persistidos separadamente, sem zero-filling.
 4. Falha de PI gera `ACQUISITION_FAILURE`, não alerta de desempenho.
@@ -135,6 +154,14 @@ diagnóstico preditivo nesta fase.
 6. Sessões são separadas em inicialização e possível switchover, sem cálculo entre sessões.
 7. Dashboard exibe os três grupos, detalhe de métricas e alarmes de estado.
 8. Testes executam sem PI real e os logs não incluem credenciais.
+9. Baselines são limitadas à sessão, usam somente amostras anteriores e exigem quantidade mínima.
+10. Alarmes analíticos exigem regra composta, persistência e histerese configuráveis.
 
 Veja [a documentação técnica da Fase 1](docs/phase1.md) para premissas,
 limitações e o contrato do PI AF SDK.
+
+As entregas adicionais estão em [Fase 2](docs/phase2.md),
+[Fase 3](docs/phase3.md) e [Fase 4](docs/phase4.md).
+
+A [Fase 5](docs/phase5.md) compara modelos não supervisionados apenas em modo
+sombra e somente após os gates de qualidade e alinhamento temporal.

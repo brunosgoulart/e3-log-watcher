@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Sequence
 
 from app.acquisition.interfaces import PiClient, PiClientError
@@ -45,7 +46,14 @@ class PiAfSdkClient(PiClient):
         try:
             for tag in requested:
                 point = sdk["PIPoint"].FindPIPoint(server, tag)
-                values = point.RecordedValues(start, end, sdk["AFBoundaryType"].Inside, None, False)
+                time_range = sdk["AFTimeRange"](start.isoformat(), end.isoformat())
+                values = point.RecordedValues(
+                    time_range,
+                    sdk["AFBoundaryType"].Inside,
+                    None,
+                    False,
+                    self._config.acquisition.maximum_events_per_query,
+                )
                 events.extend(self._to_event(tag, value) for value in values)
         except Exception as exc:
             raise PiClientError("PI AF SDK recorded-values query failed") from exc
@@ -60,11 +68,17 @@ class PiAfSdkClient(PiClient):
         if self._server is not None and self._sdk is not None:
             return self._server, self._sdk
         try:
+            import pythonnet  # type: ignore[import-not-found]
+
+            # PI AF SDK is a .NET Framework SDK. The runtime must be selected
+            # before importing clr; pythonnet otherwise prefers CoreCLR.
+            pythonnet.load("netfx")
             import clr  # type: ignore[import-not-found]
 
-            clr.AddReference("OSIsoft.AFSDK")
+            clr.AddReference(str(self._assembly_path()))
             from OSIsoft.AF.Data import AFBoundaryType  # type: ignore[import-not-found]
             from OSIsoft.AF.PI import PIPoint, PIServers  # type: ignore[import-not-found]
+            from OSIsoft.AF.Time import AFTimeRange  # type: ignore[import-not-found]
         except Exception as exc:
             raise PiClientError(
                 "PI AF SDK or pythonnet is unavailable. Install the approved AF SDK and optional Python dependency."
@@ -76,8 +90,21 @@ class PiAfSdkClient(PiClient):
         except Exception as exc:
             raise PiClientError("Could not connect to the configured PI Data Archive using Windows authentication") from exc
         self._server = server
-        self._sdk = {"PIPoint": PIPoint, "AFBoundaryType": AFBoundaryType}
+        self._sdk = {"PIPoint": PIPoint, "AFBoundaryType": AFBoundaryType, "AFTimeRange": AFTimeRange}
         return server, self._sdk
+
+    def _assembly_path(self) -> Path:
+        configured = self._config.pi_system.af_sdk_assembly_path
+        candidates = [
+            Path(configured) if configured else None,
+            Path(r"C:\Program Files (x86)\PIPC\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll"),
+            Path(r"C:\Program Files\PIPC\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll"),
+            Path(r"C:\Program Files\AVEVA\PI System\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll"),
+        ]
+        for candidate in candidates:
+            if candidate and candidate.is_file():
+                return candidate
+        raise PiClientError("OSIsoft.AFSDK.dll was not found in the configured or standard Windows locations")
 
     def _to_event(self, tag_name: str, af_value: Any) -> PiEvent:
         timestamp = self._to_datetime(getattr(af_value, "Timestamp", None))

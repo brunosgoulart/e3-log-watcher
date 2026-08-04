@@ -1,0 +1,68 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "E3 Monitor — PI AF SDK (dashboard local)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.main",
+      "args": [
+        "--config",
+        "configs/phase1.yaml",
+        "--serve"
+      ],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUTF8": "1"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "Uvicorn running on (https?://[^\\s]+)"
+      }
+    },
+    {
+      "name": "E3 Monitor — Simulado (dashboard local)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.main",
+      "args": [
+        "--config",
+        "configs/phase1.yaml",
+        "--simulate",
+        "--serve"
+      ],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUTF8": "1"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "Uvicorn running on (https?://[^\\s]+)"
+      }
+    },
+    {
+      "name": "E3 Monitor — PI AF SDK (uma aquisição)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.main",
+      "args": [
+        "--config",
+        "configs/phase1.yaml",
+        "--once"
+      ],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    }
+  ]
+}

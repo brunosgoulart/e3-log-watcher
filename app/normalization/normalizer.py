@@ -54,8 +54,14 @@ class EventNormalizer:
             metrics = {suffix: event.converted_value for suffix, event in latest_by_suffix.items()}
             metric_validity = {suffix: event.valid_for_analysis for suffix, event in latest_by_suffix.items()}
             missing = [suffix for suffix in self._config.metric_catalog if suffix not in latest_by_suffix]
-            collection = metrics.get("CollectionTimeStamp")
-            collection_timestamp = collection if isinstance(collection, datetime) else None
+            source_candidates = [
+                event.pi_event_timestamp
+                for event in latest_by_suffix.values()
+                if event.valid_for_analysis
+                and isinstance(event.converted_value, (int, float))
+                and not isinstance(event.converted_value, bool)
+            ]
+            source_timestamp = max(source_candidates, default=None)
             valid_count = sum(metric_validity.values())
             quality_ratio = valid_count / len(self._config.metric_catalog)
             observed_at = max((event.acquired_at for event in group_events), default=events[0].acquired_at)
@@ -63,7 +69,7 @@ class EventNormalizer:
                 GroupObservation(
                     group_id=group.group_id,
                     observed_at=observed_at,
-                    collection_timestamp=collection_timestamp,
+                    source_timestamp=source_timestamp,
                     metrics=metrics,
                     metric_validity=metric_validity,
                     quality_ratio=quality_ratio,
@@ -85,7 +91,13 @@ class EventNormalizer:
                 try:
                     return float(value), None
                 except ValueError:
-                    pass
+                    # Confirmed PI value representation: e.g. "0,25" for TotalTime.
+                    # Do not accept ambiguous thousands separators.
+                    if value.count(",") == 1 and "." not in value:
+                        try:
+                            return float(value.replace(",", ".")), None
+                        except ValueError:
+                            pass
             return None, "expected_number"
         if expected_type == "text":
             return (value, None) if isinstance(value, str) else (None, "expected_text")
