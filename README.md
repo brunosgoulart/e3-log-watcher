@@ -1,4 +1,4 @@
-# E3 Predictive Monitor — Fase 1
+# E3 Predictive Monitor — Fase 1 
 
 Aplicação Python para adquirir métricas publicadas no PI System, preservar sua
 qualidade e organizar a supervisão dos grupos redundantes Elipse E3. Esta
