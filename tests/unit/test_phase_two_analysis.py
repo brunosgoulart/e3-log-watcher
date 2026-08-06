@@ -45,6 +45,14 @@ def test_current_outlier_does_not_create_baseline_with_insufficient_prior_sample
     assert result.risk_index == 0
 
 
+def test_baseline_expected_range_never_goes_below_zero(config):
+    service = PhaseTwoAnalysisService(config.analysis)
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    history = {"E3Run.CPU": [(start + timedelta(minutes=index), 0.0) for index in range(30)]}
+    profiles, _, _ = service.evaluate(_observation(start + timedelta(minutes=30), cpu=0.0), "session-1", history)
+    assert profiles[0].lower_bound == 0.0
+
+
 def test_composite_alarm_requires_persistence_and_hysteresis(config, repository):
     rule = next(rule for rule in config.analysis.composite_rules if rule.rule_id == "script_processing_pressure")
     alarm_service = CompositeAlarmService(config.analysis)

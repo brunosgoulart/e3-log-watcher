@@ -40,7 +40,10 @@ class RobustBaselineBuilder:
                     sample_count=len(values),
                     median=center,
                     mad=mad,
-                    lower_bound=center - width,
+                    # The monitored counters and resource metrics cannot be negative.
+                    # Clamp the statistical interval so the dashboard never presents
+                    # an impossible expected range below zero.
+                    lower_bound=max(0.0, center - width),
                     upper_bound=center + width,
                 )
             )

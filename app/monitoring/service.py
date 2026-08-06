@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from app.acquisition.interfaces import PiClient, PiClientError
 from app.alarms.composite import CompositeAlarmService
+from app.alarms.operational_limits import OperationalLimitAlarmService
 from app.alarms.service import PhaseOneAlarmService
 from app.config.models import AppConfig
 from app.detection.service import PhaseTwoAnalysisService
@@ -35,6 +36,7 @@ class MonitoringService:
         self._alarms = PhaseOneAlarmService()
         self._analysis = PhaseTwoAnalysisService(config.analysis)
         self._composite_alarms = CompositeAlarmService(config.analysis)
+        self._operational_limit_alarms = OperationalLimitAlarmService(config.analysis)
         self._forecasting = ForecastService(config.forecasting)
         self._notifications = NotificationService(config.notifications, logger)
         self._runtime: dict[str, GroupRuntimeState] = repository.latest_runtime_states()
@@ -112,7 +114,8 @@ class MonitoringService:
         profiles, result, rules = self._analysis.evaluate(observation, runtime.session_id, history)
         self._repository.store_baselines(profiles)
         self._repository.store_analysis_result(result)
-        opened_alarms = self._composite_alarms.synchronize(self._repository, result, rules)
+        opened_alarms = self._operational_limit_alarms.synchronize(self._repository, observation)
+        opened_alarms.extend(self._composite_alarms.synchronize(self._repository, result, rules))
         self._notifications.notify(opened_alarms)
         forecast_history = {suffix: list(values) for suffix, values in history.items()}
         for suffix, value in observation.metrics.items():

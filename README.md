@@ -91,7 +91,7 @@ estiverem disponíveis.
 ## Configuração
 
 `configs/phase1.yaml` contém as 75 tags numéricas explícitas, grupos hot/standby,
-parâmetros de aquisição, políticas de qualidade e regras iniciais de
+parâmetros de aquisição, políticas de qualidade, limites operacionais aprovados e regras de
 switchover. Ele é validado na inicialização; a aplicação encerra caso haja
 tags duplicadas, ausentes, externas à lista ou grupos inválidos.
 
@@ -99,8 +99,9 @@ O PI Data Archive foi configurado como `PIDATAPRO`, conforme o caminho
 `\\PIDATAPRO\CSEO.COGCGPRO34.E3Run.TRD`: `CSEO.COGCGPRO34.E3Run.TRD` é o nome
 da tag/PIPoint. `CollectionTimeStamp` foi removida da allow-list pois o PI a
 fornece como texto. Os tipos configurados para `FileRead` e
-`E3Server.Status` devem ser confirmados em homologação. Unidades permanecem
-`null` até confirmação pelo PI. Os valores de `E3Server.Status` que representam
+`E3Server.Status` devem ser confirmados em homologação. Unidades e limites aprovados
+estão configurados para scripts, CPU, memória, ocupação, uptime, I/O e tempo total;
+as métricas restantes seguem sob baseline dinâmico até nova aprovação. Os valores de `E3Server.Status` que representam
 indisponibilidade também permanecem vazios por segurança: sem semântica
 confirmada, a aplicação não declara indisponibilidade.
 
@@ -112,7 +113,7 @@ por um único pico. Os limites são dinâmicos e cada sinal de alarme mostra val
 intervalo de baseline, z-score robusto e tendência relativa por hora.
 
 As regras compostas exigem confirmação entre métricas relacionadas: scripts,
-fila de I/O, memória e eventos. Um alerta exige três avaliações consecutivas e
+fila de I/O, memória e eventos. Um alerta exige cinco avaliações consecutivas e
 fecha após duas avaliações sem evidência. Pesos, janelas, persistência e regras
 ficam em `configs/phase1.yaml`; não há limiar operacional fixo oculto no código.
 

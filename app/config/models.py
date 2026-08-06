@@ -132,11 +132,31 @@ class CompositeRuleConfig(BaseModel):
     metric_suffixes: list[str] = Field(min_length=2)
     minimum_confirmations: int = Field(ge=1)
     risk_weight: int = Field(ge=1, le=100)
+    minimum_values: dict[str, float] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def confirmations_fit_metrics(self) -> "CompositeRuleConfig":
         if self.minimum_confirmations > len(self.metric_suffixes):
             raise ValueError("minimum_confirmations cannot exceed the metrics in a composite rule")
+        if not set(self.minimum_values).issubset(self.metric_suffixes):
+            raise ValueError("minimum_values must reference metrics from the same composite rule")
+        return self
+
+
+class OperationalLimitConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    unit: str
+    normal_upper: float
+    attention_above: float
+    critical_above: float
+    priority: Literal["critical", "high", "medium", "low"]
+    priority_overrides: dict[str, Literal["critical", "high", "medium", "low"]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def thresholds_are_ordered(self) -> "OperationalLimitConfig":
+        if not self.normal_upper < self.attention_above < self.critical_above:
+            raise ValueError("normal, attention, and critical thresholds must be strictly increasing")
         return self
 
 
@@ -151,6 +171,7 @@ class AnalysisConfig(BaseModel):
     alarm_open_persistence: int = Field(ge=1)
     alarm_resolve_hysteresis: int = Field(ge=1)
     composite_rules: list[CompositeRuleConfig]
+    operational_limits: dict[str, OperationalLimitConfig] = Field(default_factory=dict)
 
 
 class ForecastingConfig(BaseModel):
@@ -247,6 +268,15 @@ class AppConfig(BaseModel):
             unknown_rule_metrics = set(rule.metric_suffixes) - set(METRIC_SUFFIXES)
             if unknown_rule_metrics:
                 raise ValueError(f"rule {rule.rule_id} has unknown metrics: {sorted(unknown_rule_metrics)}")
+        unknown_operational_metrics = set(self.analysis.operational_limits) - set(METRIC_SUFFIXES)
+        if unknown_operational_metrics:
+            raise ValueError(f"operational limits have unknown metrics: {sorted(unknown_operational_metrics)}")
+        for suffix, limit in self.analysis.operational_limits.items():
+            if self.metric_catalog[suffix].expected_type != "number":
+                raise ValueError(f"operational limit {suffix} must apply to a numeric metric")
+            unknown_priority_groups = set(limit.priority_overrides) - set(group_ids)
+            if unknown_priority_groups:
+                raise ValueError(f"operational limit {suffix} has unknown groups: {sorted(unknown_priority_groups)}")
         unknown_forecast_metrics = set(self.forecasting.metric_suffixes) - set(METRIC_SUFFIXES)
         if unknown_forecast_metrics:
             raise ValueError(f"forecasting has unknown metrics: {sorted(unknown_forecast_metrics)}")

@@ -406,6 +406,24 @@ class SqliteRepository:
             for row in rows
         ]
 
+    def recent_metric_values(self, group_id: str, metric_suffix: str, limit: int = 3) -> list[dict[str, Any]]:
+        """Return the latest eligible numeric measurements for an alarm explanation."""
+        with self._lock:
+            rows = self._connection.execute(
+                """SELECT pi_event_timestamp, converted_value_json
+                   FROM normalized_events
+                   WHERE group_id = ? AND metric_suffix = ?
+                     AND valid_for_analysis = 1 AND converted_value_json IS NOT NULL
+                   ORDER BY pi_event_timestamp DESC LIMIT ?""",
+                (group_id, metric_suffix, limit),
+            ).fetchall()
+        measurements: list[dict[str, Any]] = []
+        for row in rows:
+            value = json.loads(row["converted_value_json"])
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                measurements.append({"timestamp": row["pi_event_timestamp"], "value": float(value)})
+        return measurements
+
     def upsert_alarm(self, alarm: AlarmRecord) -> None:
         with self._lock, self._connection:
             existing = self._connection.execute("SELECT created_at FROM alarms WHERE alarm_key = ?", (alarm.alarm_key,)).fetchone()
@@ -435,12 +453,18 @@ class SqliteRepository:
                 (updated_at.isoformat(), group_id),
             )
 
-    def list_alarms(self, group_id: str | None = None) -> list[dict[str, Any]]:
+    def list_alarms(self, group_id: str | None = None, status: str | None = None) -> list[dict[str, Any]]:
         sql = "SELECT * FROM alarms"
-        parameters: tuple[Any, ...] = ()
+        clauses: list[str] = []
+        parameters: list[Any] = []
         if group_id:
-            sql += " WHERE group_id = ?"
-            parameters = (group_id,)
+            clauses.append("group_id = ?")
+            parameters.append(group_id)
+        if status:
+            clauses.append("status = ?")
+            parameters.append(status)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY status = 'OPEN' DESC, updated_at DESC"
         with self._lock:
             rows = self._connection.execute(sql, parameters).fetchall()
@@ -542,7 +566,7 @@ class SqliteRepository:
     def latest_analysis_by_group(self) -> dict[str, dict[str, Any]]:
         query = """
             SELECT current.group_id, current.risk_index, current.confidence,
-                   current.baseline_ready, current.rules_json, current.limitations_json
+                   current.baseline_ready, current.signals_json, current.rules_json, current.limitations_json
             FROM analysis_results AS current
             INNER JOIN (
                 SELECT group_id, MAX(analysis_event_id) AS latest_id
@@ -556,6 +580,7 @@ class SqliteRepository:
                 "risk_index": row["risk_index"],
                 "confidence": row["confidence"],
                 "baseline_ready": bool(row["baseline_ready"]),
+                "signals": json.loads(row["signals_json"]).get("signals", []),
                 "triggered_rules": json.loads(row["rules_json"]),
                 "limitations": json.loads(row["limitations_json"]),
             }

@@ -78,7 +78,12 @@ class PhaseTwoAnalysisService:
             confirmations = sum(
                 1
                 for suffix in rule.metric_suffixes
-                if (signal := by_suffix.get(suffix)) is not None and (signal.high_anomaly or signal.rising_trend)
+                if (signal := by_suffix.get(suffix)) is not None
+                and (
+                    float(signal.value) > rule.minimum_values[suffix]
+                    if suffix in rule.minimum_values
+                    else signal.high_anomaly or signal.rising_trend
+                )
             )
             if confirmations >= rule.minimum_confirmations:
                 triggered.append(rule)
