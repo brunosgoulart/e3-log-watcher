@@ -1,0 +1,26 @@
+<!-- Version: 1.14 | Date: 11/10/2026
+Changes: Updated version and script references for seven fixed SCADA server positions. -->
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>E3 Monitor — Visão geral</title>
+  <link rel="stylesheet" href="styles.css?v=1.10">
+  <script src="servers.js?v=1.2" defer></script>
+  <script src="app.js?v=1.12" defer></script>
+</head>
+<body>
+  <div class="dashboard">
+    <header class="topbar">
+      <a class="brand" href="#overview"><span class="brand-symbol">E3</span><span>E3 <b>MONITOR</b></span></a>
+      <div class="page-title">Dashboard de performance</div>
+      <div class="header-actions"><span class="demo"><i></i>DADOS SIMULADOS</span><button id="pause" type="button" aria-pressed="false">Pausar simulação</button></div>
+    </header>
+    <nav class="view-navigation" aria-label="Navegação do monitor"><a href="#overview" id="fleet-link">Visão geral</a><label>Servidor <select id="server-select"><option value="">Selecionar servidor</option></select></label><span id="simulation-status">Simulação ativa</span><span id="updated"></span></nav>
+    <main id="main" tabindex="-1"></main>
+    <footer><span><i></i>Prévia de interface · sem conexão com o Elipse E3</span><span>E3 LOG READER <b>/</b> MONITOR v1.14</span></footer>
+  </div>
+</body>
+</html>
